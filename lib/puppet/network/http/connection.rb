@@ -3,6 +3,7 @@ require 'puppet/ssl/host'
 require 'puppet/ssl/configuration'
 require 'puppet/ssl/validator'
 require 'puppet/network/http'
+require 'puppet/util/resplayer'
 require 'uri'
 require 'date'
 require 'time'
@@ -258,6 +259,7 @@ module Puppet::Network::HTTP
                       server_hostname: server_hostname,
                       retry_sleep: retry_sleep})
 
+      ::Puppet::Util::Resplayer.set(retry_sleep)
       ::Kernel.sleep(retry_sleep)
 
       return nil

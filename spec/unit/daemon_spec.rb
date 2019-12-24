@@ -257,4 +257,35 @@ describe Puppet::Daemon, :unless => Puppet.features.microsoft_windows? do
       daemon.reexec
     end
   end
+
+  describe 'when interacting with resplay_file' do
+    before(:each) do
+      Puppet[:resplay_file] = PuppetSpec::Files.tmpfile('resplay')
+      daemon.agent = agent
+    end
+
+    it 'cleans up resplay files during startup' do
+      File.write(Puppet[:resplay_file], '42')
+
+      daemon.start
+
+      expect(File.exist?(Puppet[:resplay_file])).to be(false)
+    end
+
+    it 'shifts the agent job schedule if resplay is triggerd during a run' do
+      allow(agent).to receive(:run) { Puppet::Util::Resplayer.set(42) }
+
+      daemon.start
+      agent_job = scheduler.jobs[1]
+
+      job_start = Time.now
+
+      expect(Puppet).to receive(:notice).with(/Resplay triggered/)
+      expect(Puppet::Util::Resplayer).to receive(:clear!)
+
+      agent_job.run(job_start)
+
+      expect(agent_job.last_run).to eq(job_start + 42)
+    end
+  end
 end

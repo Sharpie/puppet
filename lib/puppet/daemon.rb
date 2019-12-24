@@ -1,5 +1,6 @@
 require 'puppet/application'
 require 'puppet/scheduler'
+require 'puppet/util/resplayer'
 
 # Run periodic actions and a network server in a daemonized process.
 #
@@ -27,6 +28,7 @@ class Puppet::Daemon
   attr_reader :signals
 
   def initialize(pidfile, scheduler = Puppet::Scheduler::Scheduler.new())
+    @agent_job = nil
     @scheduler = scheduler
     @pidfile = pidfile
     @signals = []
@@ -139,6 +141,8 @@ class Puppet::Daemon
 
   def start
     create_pidfile
+    # Clear out any resplay state left by other processes.
+    Puppet::Util::Resplayer.clear!
 
     raise Puppet::DevError, _("Daemons must have an agent, server, or both") unless agent or server
 
@@ -165,14 +169,22 @@ class Puppet::Daemon
   end
 
   def run_event_loop
-    agent_run = Puppet::Scheduler.create_job(Puppet[:runinterval], Puppet[:splay], Puppet[:splaylimit]) do
+    @agent_job = Puppet::Scheduler.create_job(Puppet[:runinterval], Puppet[:splay], Puppet[:splaylimit]) do
       # Splay for the daemon is handled in the scheduler
       agent.run(:splay => false)
+
+      if (resplay = Puppet::Util::Resplayer.get) && @agent_job
+        Puppet.notice(_('Resplay triggered, shifting Puppet agent schedule by %{resplay} seconds.') %
+                      {resplay: resplay})
+
+        @agent_job.last_run += resplay
+        Puppet::Util::Resplayer.clear!
+      end
     end
 
     reparse_run = Puppet::Scheduler.create_job(Puppet[:filetimeout]) do
       Puppet.settings.reparse_config_files
-      agent_run.run_interval = Puppet[:runinterval]
+      @agent_job.run_interval = Puppet[:runinterval]
       if Puppet[:filetimeout] == 0
         reparse_run.disable
       else
@@ -188,8 +200,8 @@ class Puppet::Daemon
     end
 
     reparse_run.disable if Puppet[:filetimeout] == 0
-    agent_run.disable unless agent
+    @agent_job.disable unless agent
 
-    @scheduler.run_loop([reparse_run, agent_run, signal_loop])
+    @scheduler.run_loop([reparse_run, @agent_job, signal_loop])
   end
 end

@@ -1699,6 +1699,11 @@ EOT
         puppet agents with `splay` enabled, their checkins to your puppet masters
         can be distributed more evenly.",
     },
+    :resplay_file => {
+      :default    => "$statedir/resplay",
+      :type       => :string,
+      :desc       => "A file used to trigger resplay."
+    },
     :clientbucketdir => {
       :default  => "$vardir/clientbucket",
       :type     => :directory,
